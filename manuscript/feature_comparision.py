@@ -70,6 +70,7 @@ from scsim import scsim
 import recursieve
 
 METHOD_ORDER = ["Wilcoxon", "TTest", "LogReg", "recursieve"]
+SCENARIO_ORDER = ["null", "bimodal", "trimodal", "skew", "coexpression"]
 
 
 # =========================================================================
@@ -272,15 +273,37 @@ def _normalized(adata):
 
 
 def _filter_ranked_genes(adata, method, n_top=50, pval_cutoff=0.05):
-	"""Rank genes and keep only those meeting a p-value threshold."""
+	"""Rank genes and keep only those meeting a p-value threshold when available.
+
+	Scanpy exposes p-values for Wilcoxon and T-test, but not for logreg ranking.
+	When no p-value array exists, we fall back to the ranked list without a
+	statistical filter rather than crashing the benchmark.
+	"""
 	a = _normalized(adata)
 	sc.tl.rank_genes_groups(a, groupby="group", groups=["group_2"],
 							reference="group_1", method=method, use_raw=False)
-	names = np.asarray(a.uns["rank_genes_groups"]["names"]["group_2"])
-	pvals = np.asarray(a.uns["rank_genes_groups"]["pvals"]["group_2"])
-	mask = np.asarray(pvals < pval_cutoff)
-	filtered = names[mask].tolist()
-	return filtered[:n_top]
+	rankings = a.uns["rank_genes_groups"]
+	names = np.asarray(rankings["names"]["group_2"])
+	pvals = None
+	for key in ("pvals", "pvals_adj"):
+		if key not in rankings:
+			continue
+		candidate = rankings[key]
+		if isinstance(candidate, dict):
+			pvals = candidate.get("group_2", None)
+		else:
+			if getattr(candidate, "dtype", None) is not None and hasattr(candidate.dtype, "names"):
+				pvals = candidate["group_2"] if "group_2" in candidate.dtype.names else None
+			else:
+				pvals = candidate
+		if pvals is not None:
+			break
+	if pvals is not None:
+		pvals = np.asarray(pvals, dtype=float)
+		mask = np.isfinite(pvals) & (pvals < pval_cutoff)
+		filtered = names[mask].tolist()
+		return filtered[:n_top]
+	return names[:n_top].tolist()
 
 
 def run_wilcoxon(adata, n_top=50, pval_cutoff=0.05):
@@ -377,8 +400,11 @@ def plot_heatmap(df, out_dir, n_staged, chance, n_trials, scenarios):
 
 	df = _normalize_scenario_labels(df)
 	cols = [m for m in METHOD_ORDER if m in set(df["method"])]
+	ordered_scenarios = [s for s in SCENARIO_ORDER if s in scenarios]
+	missing = [s for s in scenarios if s not in ordered_scenarios]
+	ordered_scenarios.extend(missing)
 	piv = (df.pivot_table(index="scenario", columns="method",
-						  values="n_recovered")[cols].reindex(scenarios, fill_value=0.0))
+						  values="n_recovered")[cols].reindex(ordered_scenarios, fill_value=0.0))
 	M = np.nan_to_num(piv.to_numpy(dtype=float), nan=0.0)
 
 	cmap = LinearSegmentedColormap.from_list("seq_blue", _RAMP)
@@ -453,6 +479,8 @@ def main():
 					help="skew: skew-normal shape; group_1 +alpha, group_2 -alpha")
 	ap.add_argument("--title", default=TITLE)
 	ap.add_argument("--out-dir", default=".")
+	ap.add_argument("--plot-only", action="store_true",
+					help="skip benchmark recomputation and plot the saved CSV only")
 	args = ap.parse_args()
 
 	scenarios = [x.strip() for x in args.scenarios.split(",")]
@@ -472,6 +500,25 @@ def main():
 		if set(existing.columns) != {"scenario", "seed", "method", "n_recovered", "panel_size"}:
 			existing = pd.DataFrame(columns=["scenario", "seed", "method", "n_recovered", "panel_size"])
 
+	if args.plot_only:
+		df = existing.copy()
+		df = df[df["scenario"].astype(str).ne("")]
+		df = df.reset_index(drop=True)
+		df = _normalize_scenario_labels(df)
+		if df.empty:
+			raise SystemExit(f"No benchmark data found in {csv}; run without --plot-only to generate it first.")
+		piv = df.pivot_table(index="scenario", columns="method", values="n_recovered")
+		all_scenarios = [s for s in SCENARIO_ORDER if s in BUILDERS and s in set(piv.index) | set(scenarios)]
+		all_scenarios.extend([s for s in dict.fromkeys(list(piv.index) + scenarios) if s not in all_scenarios and s in BUILDERS])
+		print("\n" + "=" * 78)
+		print(f"PLOTTING STORED DATA FROM {csv}")
+		print("=" * 78)
+		print(piv[[m for m in METHOD_ORDER if m in piv.columns]]
+			  .reindex(all_scenarios).round(2).to_string())
+		globals()["TITLE"] = args.title
+		plot_heatmap(df, out_dir, args.n_staged, chance, args.seeds, all_scenarios)
+		return
+
 	rows = []
 	for scen in scenarios:
 		for seed in range(args.seeds):
@@ -484,15 +531,16 @@ def main():
 
 			panels = {
 				"Wilcoxon": run_wilcoxon(adata, n_top=args.n_top,
-									 pval_cutoff=args.pval_cutoff),
+											 pval_cutoff=args.pval_cutoff),
 				"TTest": run_ttest(adata, n_top=args.n_top,
-									 pval_cutoff=args.pval_cutoff),
+											 pval_cutoff=args.pval_cutoff),
 				"LogReg": run_logreg(adata, n_top=args.n_top,
-									 pval_cutoff=args.pval_cutoff),
+											 pval_cutoff=args.pval_cutoff),
 			}
 			rec, uniq = run_recursieve(adata, n_top=args.n_top,
-									 max_iterations=args.max_iterations,
-									 pval_cutoff=args.pval_cutoff)
+											 max_iterations=args.max_iterations,
+											 pval_cutoff=args.pval_cutoff)
+			panels["recursieve"], panels["recursieve_unique"] = rec, uniq
 
 			line = []
 			for m in METHOD_ORDER:
@@ -521,7 +569,8 @@ def main():
 		  f"mean of n={args.seeds})")
 	print("=" * 78)
 	piv = df.pivot_table(index="scenario", columns="method", values="n_recovered")
-	all_scenarios = [s for s in list(dict.fromkeys(list(piv.index) + scenarios)) if s in BUILDERS]
+	all_scenarios = [s for s in SCENARIO_ORDER if s in BUILDERS and s in set(piv.index) | set(scenarios)]
+	all_scenarios.extend([s for s in dict.fromkeys(list(piv.index) + scenarios) if s not in all_scenarios and s in BUILDERS])
 	print(piv[[m for m in METHOD_ORDER if m in piv.columns]]
 		  .reindex(all_scenarios).round(2).to_string())
 
