@@ -1,6 +1,13 @@
-# Recursieve
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="manuscript/logo_dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="manuscript/logo_light.png">
+    <img src="manuscript/logo_light.png" alt="Recursieve logo" width="360">
+  </picture>
+</p>
 
-Recursieve is an iterative gene selection algorithm that identifies discriminative genes between two biological groups in single-cell datasets. It uses an ensemble learning approach with a blend of random forest classifiers and gaussian mixture models to progressively select genes that best separate the groups, collapsing selected genes into a lower dimensional representational axis at each iteration.
+
+**Recursieve** is an iterative gene selection algorithm that identifies discriminative genes between two biological groups in single-cell datasets. It uses an ensemble learning approach with a blend of random forest classifiers and gaussian mixture models to progressively select genes that best separate the groups, collapsing selected genes into a lower dimensional representational axis at each iteration.
 
 ## Installation
 
