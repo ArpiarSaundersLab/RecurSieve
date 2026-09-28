@@ -40,8 +40,8 @@ def main() -> None:
 	print(f"Loading data from: {adata_path}")
 	adata_alz = ad.read_h5ad(adata_path)
 	
-	#subsample the data to 1000 cells using scanpy's subsample function
-	adata_alz = sc.pp.subsample(adata_alz, n_obs=5000, copy=True)
+	#subsample the data to n cells using scanpy's subsample function
+	adata_alz = sc.pp.subsample(adata_alz, n_obs=50000, copy=True)
 
 	# Replace ensemble IDs with gene names and make unique
 	adata_alz.var_names = adata_alz.var['feature_name']
@@ -58,7 +58,7 @@ def main() -> None:
 		field_name="Disease.Group",
 		plots=False,
 		print_to_console=False,
-		max_iterations=25,
+		max_iterations=50,
 	)
 
 	print(f"Analysis complete. Selected {len(model.genes)} genes over {len(model.accuracy_scores)} iterations")
