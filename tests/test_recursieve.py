@@ -95,6 +95,37 @@ class TestRecursieve(unittest.TestCase):
         self.assertIsInstance(df, pd.DataFrame)
         self.assertTrue(set(df.columns).issuperset({"gene", "rf_rank", "logfc"}))
 
+    def test_logfc_cutoff_parameter_filters_de_results(self):
+        adata = self._make_small_dataset()
+
+        model = recursieve.recursieve(
+            adata=adata,
+            group1="group_1",
+            group2="group_2",
+            field_name="group",
+            max_iterations=1,
+            plots=False,
+            print_to_console=False,
+            seed=42,
+            n_estimators=20,
+            n_jobs=1,
+            logfc_cutoff=0.1,
+        )
+
+        self.assertTrue(hasattr(model, "logfc_cutoff"))
+        self.assertEqual(model.logfc_cutoff, 0.1)
+
+        df = pd.DataFrame({
+            "names": ["Gene0", "Gene1", "Gene2", "Gene3"],
+            "logfoldchanges": [0.05, 0.11, -0.2, 0.0],
+            "pvals": [0.01, 0.01, 0.01, 0.01],
+            "pvals_adj": [0.02, 0.02, 0.02, 0.02],
+            "scores": [1.0, 1.0, 1.0, 1.0],
+        })
+
+        filtered = model._filter_de_df(df)
+        self.assertEqual(filtered["names"].tolist(), ["Gene1", "Gene2"])
+
 
 if __name__ == "__main__":
     unittest.main()

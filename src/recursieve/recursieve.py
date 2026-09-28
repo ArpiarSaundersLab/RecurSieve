@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 import scanpy as sc
 import anndata as ad
+from AnnSQL import AnnSQL
 import seaborn as sns
 import matplotlib.pyplot as plt
 from collections import OrderedDict
@@ -28,6 +29,8 @@ class recursieve:
 	----------
 	adata : anndata.AnnData
 		Annotated data matrix with cells in obs, genes in var.
+	annsq_db : anndata.AnnData, optional
+		Precomputed AnnSql database
 	group1 : str
 		Label of first group in field_name column.
 	group2 : str
@@ -49,6 +52,10 @@ class recursieve:
 	pval_cutoff : float, optional
 		P-value threshold for differential expression filtering.
 		Default is 0.05.
+	logfc_cutoff : float, optional
+		Absolute log2 fold-change threshold for differential expression
+		filtering. Genes with |logFC| below this value are excluded.
+		Default is 0.1.
 	seed : int, optional
 		Random seed for reproducibility (used in RF, train/test split, GMM).
 		Default is 42.
@@ -85,9 +92,11 @@ class recursieve:
 	"""
 	def __init__(self, adata, group1, group2, field_name="sample", plots=False,
 				 print_to_console=False, max_iterations=100, additive=True,
-				 flip_rate_percentage=0.01, pval_cutoff=0.05, seed=42,
-				 summary_method="mean", n_estimators=300, n_jobs=-1):
+				 flip_rate_percentage=0.01, pval_cutoff=0.05, logfc_cutoff=0.1,
+				 seed=42, summary_method="mean", n_estimators=300, n_jobs=-1,
+				 annsql_db=None):
 		self.adata = adata
+		self.annsql_db = annsql_db
 		self.group1 = group1
 		self.group2 = group2
 		self.field_name = field_name
@@ -97,6 +106,7 @@ class recursieve:
 		self.additive = additive
 		self.flip_rate_percentage = flip_rate_percentage
 		self.pval_cutoff = pval_cutoff
+		self.logfc_cutoff = logfc_cutoff
 		self.seed = seed
 		self.summary_method = summary_method
 		self.gene_expression_log = OrderedDict()  # preserves selection order
@@ -165,6 +175,20 @@ class recursieve:
 		>>> model = recursieve(...)
 		>>> model.preprocessing()  # called automatically in __init__
 		"""
+
+		#if annsql exists, but no anndata then open the db and make a anndata object
+		if self.annsql_db is not None and self.adata is None:
+			
+			#open the annsql db and write to a temp.h5ad file
+			AnnSQL(self.annsql_db).write_adata(filename='temp.h5ad')
+			
+			#open the temp.h5ad file and assign to self.adata
+			self.adata = ad.read_h5ad('temp.h5ad')
+			
+			#delete the temp.h5ad file
+			os.remove('temp.h5ad')
+
+
 		self.adata.layers["counts"] = self.adata.X.copy()
 		self.adata.var["mt"] = self.adata.var_names.str.upper().str.startswith("MT-")
 		self.adata.var["ribo"] = self.adata.var_names.str.upper().str.match(r"^RPS|^RPL")
@@ -596,18 +620,30 @@ class recursieve:
 				print(top_gene)
 			iteration += 1
 
+	def _filter_de_df(self, df):
+		"""Filter DE results by p-value and absolute log2 fold-change thresholds."""
+		col_logfc = next((c for c in ["logfoldchanges", "logfc"] if c in df.columns), None)
+		col_pval = next((c for c in ["pvals", "pval"] if c in df.columns), None)
+		if not all([col_logfc, col_pval]):
+			raise KeyError(f"DE columns missing. Got: {list(df.columns)}")
+
+		filtered = df[(df[col_pval] < self.pval_cutoff) &
+				 (df[col_logfc].abs() >= self.logfc_cutoff)].copy()
+		return filtered.sort_values(col_pval, kind="mergesort")
+
 	def scanpy_de_original_groups(self, n_top=None, method="wilcoxon"):
 		"""
 		Compute differential expression reference for gene filtering.
 
 		Ranks genes by differential expression between group1 and group2
-		using scanpy. Filters by p-value cutoff and stores results in
-		self.de_dict. Both upregulated and downregulated genes are included.
+		using scanpy. Filters by p-value and absolute log fold-change cutoffs
+		and stores results in self.de_dict. Both upregulated and downregulated
+		genes are included.
 
 		Parameters
 		----------
 		n_top : int, optional
-			Cap number of DE genes (after p-value filtering).
+			Cap number of DE genes (after p-value and logFC filtering).
 			Default is None (no cap).
 		method : str, optional
 			Differential expression test ("wilcoxon", "t-test", etc).
@@ -638,7 +674,7 @@ class recursieve:
 		if not all([col_logfc, col_pval, col_padj]):
 			raise KeyError(f"DE columns missing. Got: {list(df.columns)}")
 
-		df = df[df[col_pval] < self.pval_cutoff].sort_values(col_pval)
+		df = self._filter_de_df(df)
 		if n_top is not None:
 			df = df.head(int(n_top))
 		self.de_dict = OrderedDict()
