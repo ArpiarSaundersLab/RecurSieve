@@ -7,7 +7,7 @@
 </p>
 
 
-**Recursieve** is an iterative gene selection algorithm that identifies discriminative genes between two biological groups in single-cell datasets. It uses an ensemble learning approach with a blend of random forest classifiers and gaussian mixture models to progressively select genes that best separate the groups, collapsing selected genes into a lower dimensional representational axis at each iteration.
+**RecurSieve** is an iterative gene selection algorithm that identifies discriminative genes between two biological groups in single-cell datasets. It uses an ensemble learning approach with a blend of random forest classifiers and gaussian mixture models to progressively select genes that best separate the groups, collapsing selected genes into a lower dimensional representational axis at each iteration.
 
 ## Installation
 
@@ -55,7 +55,9 @@ scores = model.accuracy_scores
 | n_estimators | int | 300 | Number of random forest trees |
 | n_jobs | int | -1 | Number of parallel jobs (-1 uses all cores) |
 
+<br>
+
 ## Citation
 
-RecurSieve: Ensemble Machine Learning Algorithm for Single-Cell Feature Selection Identifies Unique Gene Signatures
-[bioRxiv] link coming soon
+RecurSieve: An Ensemble Learning Algorithm for Single-Cell Feature Selection Captures Subtle Gene Expression Patterns<br>
+<i>bioRxiv link coming soon</i>
