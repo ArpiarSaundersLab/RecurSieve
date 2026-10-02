@@ -14,7 +14,7 @@
 Install directly from the GitHub repository:
 
 ```bash
-pip install git+https://github.com/BrightJellyfish7/Recursive-Feature-Selection-Algorithm.git
+pip install git+https://github.com/ArpiarSaundersLab/RecurSieve.git
 ```
 
 ## Usage
@@ -33,7 +33,6 @@ model = recursieve(
 )
 
 selected_genes = model.unique_gene_panel
-scores = model.accuracy_scores
 ```
 
 ## Parameters
