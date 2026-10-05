@@ -1,21 +1,20 @@
-"""Runtime benchmark for recursieve across dataset sizes.
+"""Runtime of recursieve on simulated data of increasing size.
 
-This script:
-1. Uses scsim to generate 5 synthetic datasets with 2000 genes and
-   cell counts [5000, 10000, 15000, 20000, 25000].
-2. Runs recursieve 3 times on each dataset.
-3. Stores per-run runtimes and per-size summaries.
-4. Produces a manuscript-ready bar plot with error bars.
+Runs recursieve 3 times on simulated datasets of 2000 genes and 5k to 25k
+cells. Existing results in the output folder are resumed.
 
-Outputs are written to the current directory (expected: manuscript/):
-- runtime_benchmark_results.csv
-- runtime_benchmark_summary.csv
-- runtime_benchmark_barplot.png
-- runtime_benchmark_barplot.pdf
+Usage:
+    python runtime_benchmark.py [--out-dir DIR]
+
+Outputs (to DIR):
+- runtime_benchmark_results.csv: Runtime of every run
+- runtime_benchmark_summary.csv: Mean, SD, min, and max per size
+- runtime_benchmark_barplot.png / .pdf
 """
 
 from __future__ import annotations
 
+import argparse
 import time
 from pathlib import Path
 
@@ -30,15 +29,11 @@ from scsim import scsim
 
 GENE_COUNT = 2000
 CELL_COUNTS = [5000, 10000, 15000, 20000, 25000]
-#CELL_COUNTS = [1000, 2000, 3000]
-
 N_REPEATS = 3
-MAX_ITERATIONS = 50
-N_ESTIMATORS = 100
 
 
 def build_dataset(ncells: int, ngenes: int, seed: int) -> ad.AnnData:
-    """Generate one synthetic dataset and format group labels for recursieve."""
+    """Simulate one dataset with group_1 and group_2 labels."""
     simulator = scsim(
         ngenes=ngenes,
         ncells=ncells,
@@ -76,11 +71,10 @@ def time_recursieve(adata: ad.AnnData, seed: int) -> float:
 
 
 def plot_results(summary_df: pd.DataFrame, out_png: Path, out_pdf: Path) -> None:
-    """Create a publication-quality bar plot with SD error bars."""
+    """Bar plot of mean runtime with SD error bars."""
     sns.set_theme(style="whitegrid", context="talk")
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    order = CELL_COUNTS
     plot_df = summary_df.sort_values("cells").copy()
     plot_df["cells_label"] = plot_df["cells"].map(lambda x: f"{x // 1000}k")
 
@@ -111,7 +105,11 @@ def plot_results(summary_df: pd.DataFrame, out_png: Path, out_pdf: Path) -> None
 
 
 def main() -> None:
-    out_dir = Path(__file__).resolve().parent
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--out-dir", type=Path,
+                        default=Path(__file__).resolve().parent / "robustness" / "runtime_benchmark")
+    out_dir = parser.parse_args().out_dir
+    out_dir.mkdir(parents=True, exist_ok=True)
     results_path = out_dir / "runtime_benchmark_results.csv"
     summary_path = out_dir / "runtime_benchmark_summary.csv"
     plot_png = out_dir / "runtime_benchmark_barplot.png"
@@ -171,12 +169,7 @@ def main() -> None:
 
     plot_results(summary_df, out_png=plot_png, out_pdf=plot_pdf)
 
-    print("\nBenchmark complete.")
-    print(f"Saved: {results_path}")
-    print(f"Saved: {summary_path}")
-    print(f"Saved: {plot_png}")
-    print(f"Saved: {plot_pdf}")
-    print(f"Settings: max_iterations={MAX_ITERATIONS}, n_estimators={N_ESTIMATORS}")
+    print(summary_df.round(2).to_string(index=False))
 
 
 if __name__ == "__main__":

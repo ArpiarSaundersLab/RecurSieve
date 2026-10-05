@@ -1,17 +1,17 @@
-"""Venn diagram of recursieve vs plain Random Forest gene panels.
+"""Venn diagram of recursieve vs plain RF gene panels, with gene lists.
 
-Reads the per-gene comparison written by alzheimers_rf_baseline.py and draws a
-two-set Venn (styled to match alzheimers_venn.png) with the genes in each
-region listed beneath it. Each region carries boxed cards splitting its genes
-by DE status (DE, failing the logFC cutoff, or failing the p-value cutoff),
-matching alzheimers_venn.png.
+Reads alzheimers_rf_vs_recursieve_genes.csv and alzheimers_de_full.csv.
 
-Outputs are written to the current directory (expected: manuscript/):
+Usage:
+	python alzheimers_rf_vs_recursieve_venn.py [--out-dir DIR]
+
+Outputs (to DIR):
 - alzheimers_rf_vs_recursieve_venn.png / .pdf
 """
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -27,14 +27,16 @@ PVAL_CUTOFF = 0.05
 
 
 def main() -> None:
-	"""Draw the recursieve vs plain RF Venn diagram with region gene lists."""
 	plt.rcParams.update({
 		"font.family": "Arial", "font.size": 13,
 		"mathtext.fontset": "custom", "mathtext.rm": "Arial",
 		"mathtext.it": "Arial:italic", "mathtext.bf": "Arial:bold",
 		"pdf.fonttype": 42, "ps.fonttype": 42,
 	})
-	out_dir = Path(__file__).resolve().parent
+	parser = argparse.ArgumentParser(description=__doc__)
+	parser.add_argument("--out-dir", type=Path,
+						default=Path(__file__).resolve().parent / "robustness" / "all_cell_types")
+	out_dir = parser.parse_args().out_dir
 	df = pd.read_csv(out_dir / "alzheimers_rf_vs_recursieve_genes.csv")
 
 	rec = df[df["panel"] == "recursieve"].sort_values("panel_rank")
@@ -60,7 +62,7 @@ def main() -> None:
 				linespacing=1.35, bbox=dict(boxstyle="round,pad=0.5", fc="white",
 											ec=edge, lw=2.0))
 
-	# Same DE status split as alzheimers_venn.png (p takes precedence)
+	# DE status per region, p is checked first
 	criteria = (
 		("DE", "p < 0.05\n|log$_2$FC| ≥ 0.1", 3),
 		("fails_logfc", "p < 0.05\n|log$_2$FC| < 0.1", 3),
@@ -91,7 +93,7 @@ def main() -> None:
 	ax.set_aspect("equal")
 	ax.axis("off")
 
-	# Gene lists beneath each region
+	# gene lists below each region
 	ax_l = fig.add_axes([0.04, 0.02, 0.92, 0.39])
 	ax_l.axis("off")
 	cols = (
