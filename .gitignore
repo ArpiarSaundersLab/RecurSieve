@@ -20,3 +20,6 @@ examples/data/
 *.asql
 *.wal
 *.h5ad
+# run logs
+logs/
+*.log
