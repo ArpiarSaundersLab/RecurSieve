@@ -32,8 +32,12 @@ model = recursieve(
     max_iterations=100,
 )
 
-selected_genes = model.unique_gene_panel
-```
+# all genes found
+panel = model.genes
+
+# genes unique to RecurSieve
+non_de_genes = model.unique_gene_panel 
+ ```
 
 ## Parameters
 
@@ -47,12 +51,36 @@ selected_genes = model.unique_gene_panel
 | print_to_console | bool | False | Print selected genes during iteration |
 | max_iterations | int | 100 | Maximum iterations to run |
 | additive | bool | True | Add new genes to panel or replace |
-| flip_rate_percentage | float | 0.01 | Threshold for label oscillation detection |
-| pval_cutoff | float | 0.05 | P-value threshold for significance |
+| flip_rate_percentage | float | 0.01 | Stop when the label flip rate falls below this value |
+| patience | int or None | 10 | Stop after this many iterations without a new flip-rate minimum (None disables) |
+| pval_cutoff | float | 0.05 | P-value threshold for differential expression |
+| logfc_cutoff | float | 0.1 | Absolute log2 fold-change threshold for differential expression |
 | seed | int | 42 | Random seed for reproducibility |
 | summary_method | str | "mean" | Method to collapse genes: "mean" or "pca" |
 | n_estimators | int | 300 | Number of random forest trees |
 | n_jobs | int | -1 | Number of parallel jobs (-1 uses all cores) |
+| max_depth | int or None | 10 | Maximum random forest tree depth |
+| n_seeds | int | 10 | Seeds used by `seed_stability()` |
+| preprocess | bool | True | Run QC, normalization, and HVG selection |
+| run | bool | True | Run the pipeline on construction; if False, call `fit()` later |
+| annsql_db | str or None | None | AnnSQL database to load instead of `adata` |
+
+## Robustness checks
+
+`seed_stability` checks whether the same genes are selected with different random seeds. `coexpression_null` checks whether the selected genes are found more often than by chance, by rerunning on randomized data.
+
+Each seed and each shuffle is a full RecurSieve run, so these checks take much longer than a single run. On a 10-core laptop, 25 shuffles took about 1.5 hours for 25,000 cells and about 3.5 hours for 50,000 cells.
+
+Both methods return a dictionary of pandas DataFrames and do not write files. The example below runs both checks and saves the main tables as CSV files.
+
+```python
+seeds = model.seed_stability(n_seeds=10)
+null = model.coexpression_null(n_shuffles=25)
+
+seeds["gene_frequency"].to_csv("seed_gene_frequency.csv", index=False)
+null["pvalues"].to_csv("null_pvalues.csv", index=False)
+null["gene_frequency"].to_csv("null_gene_frequency.csv", index=False)
+```
 
 <br>
 
