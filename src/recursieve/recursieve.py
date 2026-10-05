@@ -944,7 +944,7 @@ class recursieve:
 		# preserve order of self.genes (RF rank) instead of returning a set
 		return [g for g in self.genes if g not in hits_set]
 
-	def seed_stability(self, n_seeds=None, max_iterations=None, n_jobs=None,
+	def seed_stability(self, n_seeds=10, max_iterations=None, n_jobs=None,
 					   n_parallel=None):
 		"""
 		Measure how stable the selected panel is across random seeds.
@@ -1063,7 +1063,7 @@ class recursieve:
 		}
 		return self.seed_stability_results
 
-	def coexpression_null(self, n_shuffles=3, max_iterations=None, n_parallel=None, verbose=0):
+	def coexpression_null(self, n_shuffles=25, max_iterations=None, n_parallel=None, verbose=0):
 		"""
 		Rerun selection on data with gene-gene co-expression destroyed.
 
