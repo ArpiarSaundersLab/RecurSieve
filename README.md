@@ -98,5 +98,5 @@ The RecurSieve software is released under the [MIT License](https://github.com/A
 
 ## Citation
 
-RecurSieve: An Ensemble Learning Algorithm for Single-Cell Feature Selection Captures Subtle Gene Expression Patterns<br>
+RecurSieve: A Python Package Using Iterative Machine Learning to Detect Subtle Gene Expression Patterns in Single-Cell Data<br>
 <i>bioRxiv link coming soon</i>
