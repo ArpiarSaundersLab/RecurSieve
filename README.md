@@ -1,8 +1,8 @@
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="manuscript/logo_dark.png">
-    <source media="(prefers-color-scheme: light)" srcset="manuscript/logo_light.png">
-    <img src="manuscript/logo_light.png" alt="Recursieve logo" width="360">
+    <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/ArpiarSaundersLab/RecurSieve/main/manuscript/logo_dark.png">
+    <source media="(prefers-color-scheme: light)" srcset="https://raw.githubusercontent.com/ArpiarSaundersLab/RecurSieve/main/manuscript/logo_light.png">
+    <img src="https://raw.githubusercontent.com/ArpiarSaundersLab/RecurSieve/main/manuscript/logo_light.png" alt="Recursieve logo" width="360">
   </picture>
 </p>
 
@@ -11,7 +11,15 @@
 
 ## Installation
 
-Install directly from the GitHub repository:
+Install from PyPI:
+
+```bash
+pip install recursieve
+```
+
+RecurSieve requires Python 3.12 or newer.
+
+To install the development version from GitHub:
 
 ```bash
 pip install git+https://github.com/ArpiarSaundersLab/RecurSieve.git
@@ -83,6 +91,10 @@ null["gene_frequency"].to_csv("null_gene_frequency.csv", index=False)
 ```
 
 <br>
+
+## License
+
+The RecurSieve software is released under the [MIT License](https://github.com/ArpiarSaundersLab/RecurSieve/blob/main/LICENSE). The data, figures, and tables in [`manuscript/`](https://github.com/ArpiarSaundersLab/RecurSieve/tree/main/manuscript) are dedicated to the public domain under [CC0 1.0](https://github.com/ArpiarSaundersLab/RecurSieve/blob/main/manuscript/LICENSE).
 
 ## Citation
 
