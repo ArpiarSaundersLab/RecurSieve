@@ -6,8 +6,8 @@
   </picture>
 </p>
 
-<!-- Zenodo DOI badge: after the v1.0.1 release, replace XXXXXXX with the concept record ID and uncomment -->
-<!-- <p align="center"><a href="https://doi.org/10.5281/zenodo.XXXXXXX"><img src="https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXXX.svg" alt="DOI"></a></p> -->
+
+<p align="center"><a href="https://doi.org/10.5281/zenodo.1141538431"><img src="https://zenodo.org/badge/DOI/10.5281/zenodo.1141538431.svg" alt="DOI"></a></p>
 
 **RecurSieve** is an iterative gene selection algorithm that identifies discriminative genes between two biological groups in single-cell datasets. It uses an ensemble learning approach with a blend of random forest classifiers and gaussian mixture models to progressively select genes that best separate the groups, collapsing selected genes into a lower dimensional representational axis at each iteration.
 
