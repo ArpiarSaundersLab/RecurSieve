@@ -1,54 +1,23 @@
-# On every push to main: build and test the package. If the version in
-# pyproject.toml is not on PyPI yet, publish it, then tag and create a
-# GitHub Release. Uses PyPI Trusted Publishing (OIDC), so no API token is
-# stored in the repo.
+# Build and test on every push and pull request to main. When a GitHub
+# Release is published, also check that its tag matches the pyproject.toml
+# version and publish the package to PyPI. Uses PyPI Trusted Publishing
+# (OIDC), so no API token is stored in the repo.
 name: Publish to PyPI
 
 on:
   push:
     branches: [main]
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
 
 permissions:
   contents: read
 
-concurrency:
-  group: publish
-  cancel-in-progress: false
-
 jobs:
-  check:
-    name: Check version
-    runs-on: ubuntu-latest
-    outputs:
-      version: ${{ steps.version.outputs.version }}
-      publish: ${{ steps.version.outputs.publish }}
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: actions/setup-python@v7
-        with:
-          python-version: "3.12"
-
-      - name: Compare pyproject.toml version with PyPI
-        id: version
-        run: |
-          VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
-          STATUS=$(curl -s -o /dev/null -w '%{http_code}' "https://pypi.org/pypi/recursieve/$VERSION/json")
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          if [ "$STATUS" = "404" ]; then
-            echo "publish=true" >> "$GITHUB_OUTPUT"
-            echo "Version $VERSION is not on PyPI; it will be published."
-          elif [ "$STATUS" = "200" ]; then
-            echo "publish=false" >> "$GITHUB_OUTPUT"
-            echo "Version $VERSION is already on PyPI; skipping publish."
-          else
-            echo "::error::Unexpected response from PyPI ($STATUS)"
-            exit 1
-          fi
-
   build:
     name: Build and test
-    needs: check
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -56,6 +25,16 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
+
+      - name: Check release tag matches package version
+        if: github.event_name == 'release'
+        run: |
+          PKG_VERSION=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml', 'rb'))['project']['version'])")
+          TAG="${GITHUB_REF_NAME#v}"
+          if [ "$TAG" != "$PKG_VERSION" ]; then
+            echo "::error::Release tag ($GITHUB_REF_NAME) does not match pyproject.toml version ($PKG_VERSION)"
+            exit 1
+          fi
 
       - name: Build sdist and wheel
         run: |
@@ -75,12 +54,12 @@ jobs:
 
   publish:
     name: Publish to PyPI
-    needs: [check, build]
-    if: needs.check.outputs.publish == 'true'
+    needs: build
+    if: github.event_name == 'release'
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/project/recursieve/${{ needs.check.outputs.version }}/
+      url: https://pypi.org/project/recursieve/
     permissions:
       id-token: write
     steps:
@@ -90,26 +69,3 @@ jobs:
           path: dist/
 
       - uses: pypa/gh-action-pypi-publish@release/v1
-
-  release:
-    name: Create GitHub Release
-    needs: [check, publish]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@v8
-        with:
-          name: dist
-          path: dist/
-
-      - name: Tag and release
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VERSION: ${{ needs.check.outputs.version }}
-        run: |
-          gh release create "v$VERSION" dist/* \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "v$VERSION" \
-            --generate-notes
