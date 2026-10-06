@@ -354,7 +354,7 @@ class recursieve:
 		>>> print(model.genes[0])
 		"""
 		X = self._get_X_dense()
-		y = self.adata.obs[self.field_name].values
+		y = self.adata.obs[self.field_name].to_numpy()
 
 		# remove already-used genes (none on first call, kept for parity)
 		if len(self.genes) > 0:
@@ -742,7 +742,7 @@ class recursieve:
 			print(f"Iteration {iteration}")
 			gene = self.genes[-1]
 			_, labels = self.cluster_infectivity_gmm()
-			y = self.adata.obs[f"gmm_{gene}"].values
+			y = self.adata.obs[f"gmm_{gene}"].to_numpy()
 
 			if self.prev_labels is not None:
 				fr = self._flip_rate(labels, self.prev_labels)
