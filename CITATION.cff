@@ -1,0 +1,45 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it using the metadata from this file."
+type: software
+title: "RecurSieve: A Python Package Using Iterative Machine Learning to Detect Subtle Gene Expression Patterns in Single-Cell Data"
+version: 1.0.1
+license: MIT
+repository-code: "https://github.com/ArpiarSaundersLab/RecurSieve"
+abstract: >-
+  RecurSieve is an iterative gene selection algorithm that identifies
+  discriminative genes between two biological groups in single-cell datasets.
+  It uses an ensemble of random forest classifiers and Gaussian mixture models
+  to progressively select genes that best separate the groups, collapsing
+  selected genes into a lower-dimensional representational axis at each
+  iteration.
+keywords:
+  - single-cell
+  - scRNA-seq
+  - feature selection
+  - gene selection
+  - random forest
+authors:
+  - given-names: Anushi
+    family-names: Mittal
+    affiliation: "Vollum Institute, Oregon Health & Science University; Westview High School"
+    # orcid: "https://orcid.org/XXXX-XXXX-XXXX-XXXX"
+  - given-names: Greg
+    family-names: Chen
+    affiliation: "Vollum Institute, Oregon Health & Science University"
+    # orcid: "https://orcid.org/XXXX-XXXX-XXXX-XXXX"
+  - given-names: Connor
+    family-names: Frankston
+    affiliation: "Biomedical Engineering Graduate Program, Oregon Health & Science University"
+    # orcid: "https://orcid.org/XXXX-XXXX-XXXX-XXXX"
+  - given-names: Lamya
+    family-names: Ben Ameur
+    affiliation: "Vollum Institute, Oregon Health & Science University"
+    # orcid: "https://orcid.org/XXXX-XXXX-XXXX-XXXX"
+  - given-names: Arpiar
+    family-names: Saunders
+    affiliation: "Vollum Institute, Oregon Health & Science University"
+    # orcid: "https://orcid.org/XXXX-XXXX-XXXX-XXXX"
+  - given-names: Kenny
+    family-names: Pavan
+    affiliation: "Vollum Institute and Biomedical Engineering Graduate Program, Oregon Health & Science University"
+    orcid: "https://orcid.org/0000-0003-2442-7466"
