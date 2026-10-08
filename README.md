@@ -49,6 +49,10 @@ panel = model.genes
 non_de_genes = model.unique_gene_panel 
  ```
 
+## Example
+
+[`examples/recursieve_example.ipynb`](https://github.com/ArpiarSaundersLab/RecurSieve/blob/main/examples/recursieve_example.ipynb) is a short notebook that runs RecurSieve on simulated data, with no download needed. It builds a two-group dataset of 2,000 cells and 2,000 genes. In 10 of the genes, the `control` group is unimodal and the `disease` group is bimodal around the same center, and those genes move together. Because the group means match, differential expression has little to find. The notebook runs RecurSieve with default parameters and checks which of the 10 genes appear in `unique_gene_panel`.
+
 ## Parameters
 
 | Parameter | Type | Default | Description |
