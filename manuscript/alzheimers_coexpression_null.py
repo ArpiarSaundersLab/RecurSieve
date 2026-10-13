@@ -6,6 +6,12 @@ count is drawn from the pooled counts of genes and labels are permuted.
 Usage:
 	python alzheimers_coexpression_null.py [--out-dir DIR] [--n-shuffles N]
 		[--n-parallel N] [--cell-type TYPE] [--n-cells N] [--balance-groups]
+		[--first-shuffle K --batch-dir DIR]
+
+To add shuffles to an existing run, pass --first-shuffle (one past the last
+saved shuffle) and --batch-dir. The batch's runs, flip_rates and panels are
+written there and the saved outputs are left alone; combine them with
+alzheimers_coexpression_null_merge.py.
 
 Outputs (to DIR):
 - alzheimers_coexpression_null_runs.csv: Real and shuffled run summaries
@@ -80,6 +86,10 @@ def main() -> None:
 	parser.add_argument("--n-shuffles", type=int, default=25)
 	parser.add_argument("--n-parallel", type=int, default=None,
 						help="Shuffles run at once (default: about one per 4 cores)")
+	parser.add_argument("--first-shuffle", type=int, default=1,
+						help="Index of the first shuffle (seeds continue from here)")
+	parser.add_argument("--batch-dir", type=Path, default=None,
+						help="Write only this batch's raw tables here, for merging")
 	add_loading_args(parser)
 	args = parser.parse_args()
 	out_dir = args.out_dir
@@ -95,7 +105,13 @@ def main() -> None:
 
 	print(f"Running co-expression null ({args.n_shuffles} shuffles)...")
 	res = model.coexpression_null(n_shuffles=args.n_shuffles, n_parallel=args.n_parallel,
-								  verbose=10)
+								  verbose=10, first_shuffle=args.first_shuffle)
+	if args.batch_dir is not None:
+		args.batch_dir.mkdir(parents=True, exist_ok=True)
+		for key in ("runs", "flip_rates", "panels"):
+			res[key].to_csv(args.batch_dir / f"alzheimers_coexpression_null_{key}.csv", index=False)
+		print(f"Batch written to {args.batch_dir}")
+		return
 	for key in ("runs", "flip_rates", "panels", "gene_frequency", "pvalues"):
 		res[key].to_csv(out_dir / f"alzheimers_coexpression_null_{key}.csv", index=False)
 	plot_flip_rates(res["flip_rates"], model.flip_rate_percentage,

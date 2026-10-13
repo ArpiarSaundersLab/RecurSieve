@@ -10,20 +10,36 @@ Scenarios:
   skew          group_1 right-tailed, group_2 left-tailed, same mean
   coexpression  same marginals, staged genes correlated only in group_2
 
-Trial i uses sim_seed + i.
+Each dataset is fixed (sim_seed, stage_seed) for every trial; only
+recursieve's seed changes, so trial i uses recursieve seed rs_seed + i.
+Wilcoxon, TTest and LogReg are deterministic, so they run once per dataset.
+With --datasets N, dataset d (from --first-dataset) uses sim_seed + d and
+stage_seed + d, and the heatmap SEM is taken across per-dataset means.
+
+Heatmap cells show the mean with the SEM across trials beneath it.
+
+DE panels are filtered twice: on raw p-values (n_recovered) and on BH-adjusted
+p-values (n_recovered_adj). recursieve does not filter on p-values, so its two
+columns are the same. Both are saved; only the adjusted counts are plotted, with
+a note on the correction at the bottom of each figure.
 
 Outputs (to --out-dir):
   feature_comparison_wide_counts.csv
-  feature_comparison_wide_heatmap.png / .pdf
+  feature_comparison_wide_heatmap_adj.png / .pdf
 
 Usage:
   python feature_comparision.py --seeds 5
   python feature_comparision.py --scenarios bimodal --seeds 3
+  python feature_comparision.py --seeds 25 --datasets 25 --tag _multi
+
+With more than one dataset, a violin plot of every run per method is also
+written: feature_comparison_wide<tag>_violins_adj.png / .pdf
 """
 import warnings
 warnings.filterwarnings("ignore")
 
 import argparse
+import textwrap
 import time
 from pathlib import Path
 
@@ -31,7 +47,7 @@ import numpy as np
 import pandas as pd
 import anndata as ad
 import scanpy as sc
-from scipy.stats import skewnorm
+from scipy.stats import skewnorm, ttest_ind
 
 from scsim import scsim
 import recursieve
@@ -47,7 +63,9 @@ def _background(sim_seed, ncells, ngenes):
 		libloc=7.64, libscale=0.78,
 		mean_rate=7.68, mean_shape=0.34,
 		expoutprob=0.00286, expoutloc=6.15, expoutscale=0.49,
-		diffexpprob=0.025, diffexpdownprob=0., diffexploc=1.0, diffexpscale=1.0,
+		# almost no background group DE: staged genes keep the totals of the genes they
+		# replace, so a DE gene there would leak a mean difference into the block
+		diffexpprob=0.001, diffexpdownprob=0., diffexploc=1.0, diffexpscale=1.0,
 		bcv_dispersion=0.448, bcv_dof=22.087, ndoublets=0,
 		nproggenes=400, progdownprob=0., progdeloc=1.0, progdescale=1.0,
 		progcellfrac=0.35, proggoups=None,
@@ -79,6 +97,24 @@ def _match_block_totals(pattern, totals, rng=None):
 def _staged_totals(adata, n_staged):
 	"""Per-cell sum of the staged genes."""
 	return np.asarray(adata.X)[:, :n_staged].sum(axis=1).astype(np.int64)
+
+
+def check_staging(adata, staged, p_min=1e-4):
+	"""Stop if the staged block's per-cell totals differ between the groups.
+
+	Staged genes keep each cell's total of the genes they replace, so a group
+	difference in those totals would give every staged gene a real mean
+	difference. Welch t-test on log1p totals; clean backgrounds give p > 0.009.
+	"""
+	if not staged:
+		return
+	totals = np.asarray(adata.X)[:, :len(staged)].sum(axis=1)
+	g2 = (adata.obs["group"] == "group_2").to_numpy()
+	p = ttest_ind(np.log1p(totals[g2]), np.log1p(totals[~g2]), equal_var=False).pvalue
+	if p < p_min:
+		ratio = totals[g2].mean() / totals[~g2].mean()
+		raise SystemExit(f"staged block differs between groups (group_2/group_1 total "
+						 f"{ratio:.2f}, p = {p:.2g}); staged genes would carry a mean difference")
 
 
 def build_null(sim_seed=32, stage_seed=0, n_staged=10, ncells=2000,
@@ -200,32 +236,24 @@ def _normalized(adata):
 
 
 def _filter_ranked_genes(adata, method, n_top=50, pval_cutoff=0.05):
-	"""Top ranked genes with p < pval_cutoff (logreg has no p-values)."""
+	"""Top ranked genes with p < pval_cutoff, as (raw p panel, adjusted p panel).
+
+	logreg has no p-values, so both panels are its top n_top genes.
+	"""
 	a = _normalized(adata)
 	sc.tl.rank_genes_groups(a, groupby="group", groups=["group_2"],
 							reference="group_1", method=method, use_raw=False)
 	rankings = a.uns["rank_genes_groups"]
 	names = np.asarray(rankings["names"]["group_2"])
-	pvals = None
+	panels = []
 	for key in ("pvals", "pvals_adj"):
 		if key not in rankings:
+			panels.append(names[:n_top].tolist())
 			continue
-		candidate = rankings[key]
-		if isinstance(candidate, dict):
-			pvals = candidate.get("group_2", None)
-		else:
-			if getattr(candidate, "dtype", None) is not None and hasattr(candidate.dtype, "names"):
-				pvals = candidate["group_2"] if "group_2" in candidate.dtype.names else None
-			else:
-				pvals = candidate
-		if pvals is not None:
-			break
-	if pvals is not None:
-		pvals = np.asarray(pvals, dtype=float)
+		pvals = np.asarray(rankings[key]["group_2"], dtype=float)
 		mask = np.isfinite(pvals) & (pvals < pval_cutoff)
-		filtered = names[mask].tolist()
-		return filtered[:n_top]
-	return names[:n_top].tolist()
+		panels.append(names[mask].tolist()[:n_top])
+	return tuple(panels)
 
 
 def run_wilcoxon(adata, n_top=50, pval_cutoff=0.05):
@@ -264,6 +292,7 @@ _INK, _MUTED, _SURFACE = "#1a1d21", "#5c636b", "#ffffff"
 
 TITLE = "Genes Recovered"
 SUBTITLE = "(Simulated)"
+SUBTITLE_ADJ = "(Simulated, adjusted p)"
 METHOD_LABELS = {"recursieve": "RecurSieve"}
 
 def _normalize_scenario_labels(df):
@@ -291,8 +320,19 @@ def _mixed_text(fig, parts, x, y, transform, vertical=False, **kw):
 		start += n
 
 
-def plot_heatmap(df, out_dir, n_staged, scenarios):
-	"""Mean genes recovered per scenario and method."""
+def correction_note(pval_cutoff):
+	"""Figure note on how the DE panels were filtered."""
+	return (f"Wilcoxon and t-test panels: genes with Benjamini\u2013Hochberg adjusted "
+			f"p < {pval_cutoff:g} (scanpy rank_genes_groups). LogReg has no p-values "
+			"(top genes by score). RecurSieve does not filter on p-values.")
+
+
+def plot_heatmap(df, out_dir, n_staged, scenarios, value="n_recovered",
+				 subtitle=SUBTITLE, suffix="", tag="", note=None):
+	"""Mean genes recovered per scenario and method.
+
+	SEM is across seeds for one dataset, or across per-dataset means for several.
+	"""
 	import matplotlib
 	matplotlib.use("Agg")
 	import matplotlib.pyplot as plt
@@ -309,14 +349,27 @@ def plot_heatmap(df, out_dir, n_staged, scenarios):
 	ordered_scenarios = [s for s in SCENARIO_ORDER if s in scenarios]
 	missing = [s for s in scenarios if s not in ordered_scenarios]
 	ordered_scenarios.extend(missing)
+	n_ds = df["dataset"].nunique()
+	n_seeds = int(df.groupby(["scenario", "method", "dataset"]).size().max())
+	if n_ds > 1:
+		sem_note = (f"Values are mean \u00b1 SEM across {n_ds} dataset means "
+					f"({n_seeds} RecurSieve seeds each).")
+		df = df.groupby(["scenario", "method", "dataset"], as_index=False)[value].mean()
+	else:
+		sem_note = (f"Values are mean \u00b1 SEM across {n_seeds} RecurSieve seeds on one "
+					"dataset; DE methods are deterministic, so their SEM is 0.")
+	note = f"{sem_note} {note}" if note else sem_note
 	piv = (df.pivot_table(index="scenario", columns="method",
-						  values="n_recovered")[cols].reindex(ordered_scenarios, fill_value=0.0))
+						  values=value)[cols].reindex(ordered_scenarios, fill_value=0.0))
 	M = np.nan_to_num(piv.to_numpy(dtype=float), nan=0.0)
+	sem = (df.pivot_table(index="scenario", columns="method", values=value,
+						  aggfunc="sem")[cols].reindex(ordered_scenarios))
+	S = np.nan_to_num(sem.to_numpy(dtype=float), nan=0.0)
 
 	cmap = LinearSegmentedColormap.from_list("seq_blue", _RAMP)
 	fig, ax = plt.subplots(figsize=(max(7.5, 1.3 * M.shape[1] + 2.4),
 									 0.85 * M.shape[0] + 1.9))
-	fig.subplots_adjust(left=0.22, right=0.86, top=0.88, bottom=0.2)
+	fig.subplots_adjust(left=0.22, right=0.86, top=0.88, bottom=0.29)
 	fig.patch.set_facecolor(_SURFACE); ax.set_facecolor(_SURFACE)
 	mesh = ax.pcolormesh(M, cmap=cmap, vmin=0, vmax=n_staged,
 						 edgecolors=_SURFACE, linewidth=2)
@@ -325,9 +378,11 @@ def plot_heatmap(df, out_dir, n_staged, scenarios):
 			v = M[i, j]
 			if np.isfinite(v):
 				label = "0.0" if abs(v) < 1e-12 else f"{v:.1f}"
-				ax.text(j + 0.5, i + 0.5, label, ha="center", va="center",
-						fontsize=8,
-						color=_SURFACE if v > n_staged * 0.55 else _INK)
+				color = _SURFACE if v > n_staged * 0.55 else _INK
+				ax.text(j + 0.5, i + 0.42, label, ha="center", va="center",
+						fontsize=8, color=color)
+				ax.text(j + 0.5, i + 0.68, f"\u00b1{S[i, j]:.2f}", ha="center",
+						va="center", fontsize=6, color=color)
 
 	ax.set_xticks(np.arange(M.shape[1]) + 0.5)
 	ax.set_xticklabels([METHOD_LABELS.get(c, c) for c in cols], rotation=35,
@@ -346,10 +401,80 @@ def plot_heatmap(df, out_dir, n_staged, scenarios):
 	cbar.outline.set_visible(False)
 	cbar.ax.tick_params(length=0, labelsize=15, colors=_INK)
 
-	_mixed_text(fig, [(TITLE + " ", {"fontweight": "bold"}), (SUBTITLE, {"fontstyle": "italic"})],
+	_mixed_text(fig, [(TITLE + " ", {"fontweight": "bold"}), (subtitle, {"fontstyle": "italic"})],
 				0.5, 1.05, ax.transAxes, fontsize=14, color=_INK)
+	fig.text(0.5, 0.02, textwrap.fill(note, 125), ha="center", va="bottom", fontsize=8,
+			 color=_MUTED)
 	for ext in ("png", "pdf"):
-		fig.savefig(out_dir / f"feature_comparison_wide_heatmap.{ext}",
+		fig.savefig(out_dir / f"feature_comparison_wide{tag}_heatmap{suffix}.{ext}",
+					dpi=300, facecolor=_SURFACE)
+	plt.close(fig)
+
+
+def plot_outcome_violins(df, out_dir, n_staged, scenarios, value="n_recovered",
+						 subtitle=SUBTITLE, suffix="", tag="", note=None):
+	"""One panel per scenario: a violin per method over every run (all datasets
+	and seeds), with each run as a gray dot. A method whose runs are all equal
+	is drawn as a flat line.
+	"""
+	import matplotlib
+	matplotlib.use("Agg")
+	import matplotlib.pyplot as plt
+
+	plt.rcParams.update({"font.family": "Arial", "pdf.fonttype": 42, "ps.fonttype": 42})
+	df = _normalize_scenario_labels(df)
+	cols = [m for m in METHOD_ORDER if m in set(df["method"])]
+	n_ds = df["dataset"].nunique()
+	n_runs = int(df.groupby(["scenario", "method"]).size().max())
+	fill, edge = _RAMP[3], _RAMP[6]
+
+	fig, axes = plt.subplots(1, len(scenarios), figsize=(2.3 * len(scenarios) + 0.8, 3.4),
+							 sharey=True)
+	axes = np.atleast_1d(axes)
+	fig.patch.set_facecolor(_SURFACE)
+	for ax, scen in zip(axes, scenarios):
+		ax.set_facecolor(_SURFACE)
+		for j, m in enumerate(cols):
+			v = df[(df["scenario"] == scen) & (df["method"] == m)][value].to_numpy(dtype=float)
+			# one dot per run, spread sideways; counts stay at their true value
+			jitter = np.random.default_rng(j).uniform(-0.2, 0.2, len(v))
+			ax.scatter(j + jitter, v, s=5, color=_MUTED, alpha=0.4, linewidths=0, zorder=4)
+			if np.ptp(v) == 0:
+				# no spread to draw a density from
+				ax.plot([j - 0.3, j + 0.3], [v[0]] * 2, color=edge, lw=2, zorder=3)
+				continue
+			parts = ax.violinplot(v, positions=[j], widths=0.75, showextrema=False)
+			for body in parts["bodies"]:
+				body.set_facecolor(fill)
+				body.set_edgecolor(edge)
+				body.set_linewidth(1)
+				body.set_alpha(1)
+				body.set_zorder(3)
+		ax.set_title(scen, fontsize=12, color=_INK)
+		ax.set_xticks(range(len(cols)))
+		ax.set_xticklabels([METHOD_LABELS.get(c, c) for c in cols], rotation=40,
+						   ha="right", fontsize=10, color=_INK)
+		ax.set_xlim(-0.6, len(cols) - 0.4)
+		ax.set_ylim(-0.35, n_staged + 0.35)
+		ax.set_yticks(range(0, n_staged + 1, 2))
+		ax.grid(axis="y", color="#e4e3df", lw=0.8)
+		ax.set_axisbelow(True)
+		for side in ("top", "right", "bottom"):
+			ax.spines[side].set_visible(False)
+		ax.spines["left"].set_color(_MUTED)
+		ax.tick_params(colors=_MUTED, length=0)
+	axes[0].set_ylabel(f"genes recovered (of {n_staged})", fontsize=11, color=_INK)
+	fig.suptitle(f"Genes Recovered {subtitle}", fontsize=13, color=_INK,
+				 fontweight="bold", x=0.5, y=0.97, va="top")
+	fig.text(0.5, 0.875, f"{n_runs} runs per method ({n_ds} datasets \u00d7 "
+			 f"{n_runs // n_ds} seeds); gray dots: single runs; flat line: every run "
+			 "recovered the same number",
+			 ha="center", va="top", fontsize=9, color=_MUTED)
+	fig.tight_layout(rect=(0, 0.07 if note else 0, 1, 0.86))
+	if note:
+		fig.text(0.5, 0.02, note, ha="center", va="bottom", fontsize=9, color=_MUTED)
+	for ext in ("png", "pdf"):
+		fig.savefig(out_dir / f"feature_comparison_wide{tag}_violins{suffix}.{ext}",
 					dpi=300, facecolor=_SURFACE)
 	plt.close(fig)
 
@@ -373,7 +498,11 @@ def main():
 	ap.add_argument("--ncells", type=int, default=2000)
 	ap.add_argument("--ngenes", type=int, default=2000)
 	ap.add_argument("--sim-seed", type=int, default=32,
-					help="base seed; trial i uses sim_seed+i")
+					help="dataset seed, fixed across trials")
+	ap.add_argument("--stage-seed", type=int, default=0,
+					help="staged-gene seed, fixed across trials")
+	ap.add_argument("--rs-seed", type=int, default=42,
+					help="base recursieve seed; trial i uses rs_seed+i")
 	ap.add_argument("--max-iterations", type=int, default=50)
 	ap.add_argument("--center", type=float, default=8.0)
 	ap.add_argument("--sd", type=float, default=1.5)
@@ -384,6 +513,11 @@ def main():
 	ap.add_argument("--out-dir", default=str(Path(__file__).resolve().parent / "robustness" / "feature_comparison"))
 	ap.add_argument("--plot-only", action="store_true",
 					help="plot the saved CSV without rerunning")
+	ap.add_argument("--datasets", type=int, default=1,
+					help="datasets to run; dataset d uses sim_seed+d and stage_seed+d")
+	ap.add_argument("--first-dataset", type=int, default=0)
+	ap.add_argument("--tag", default="",
+					help="suffix for the CSV and heatmap names, e.g. _multi")
 	args = ap.parse_args()
 
 	scenarios = [x.strip() for x in args.scenarios.split(",")]
@@ -393,46 +527,76 @@ def main():
 
 	out_dir = Path(args.out_dir)
 	out_dir.mkdir(parents=True, exist_ok=True)
-	csv = out_dir / "feature_comparison_wide_counts.csv"
-	columns = ["scenario", "seed", "method", "n_recovered", "panel_size"]
+	csv = out_dir / f"feature_comparison_wide{args.tag}_counts.csv"
+	columns = ["dataset", "scenario", "seed", "method", "n_recovered", "panel_size",
+			   "n_recovered_adj", "panel_size_adj"]
 	df = pd.DataFrame(columns=columns)
 	if csv.exists():
 		df = _normalize_scenario_labels(pd.read_csv(csv, keep_default_na=False, na_values=[]))
+	if "dataset" not in df.columns:  # a single-dataset CSV has no dataset column
+		df.insert(0, "dataset", 0)
+	keys = ["dataset", "scenario", "seed", "method"]
 
 	if not args.plot_only:
 		rows = []
-		for scen in scenarios:
+		for ds, scen in [(d, s) for d in range(args.first_dataset, args.first_dataset + args.datasets)
+						 for s in scenarios]:
+			# one dataset per scenario; DE methods are deterministic on it
+			adata, staged = BUILDERS[scen](
+				sim_seed=args.sim_seed + ds, stage_seed=args.stage_seed + ds,
+				n_staged=args.n_staged, ncells=args.ncells, ngenes=args.ngenes,
+				center=args.center, sd=args.sd, sep=args.sep, alpha=args.alpha)
+			check_staging(adata, staged)
+			# each panel is (raw p panel, adjusted p panel)
+			de_panels = {
+				"Wilcoxon": run_wilcoxon(adata, n_top=args.n_top, pval_cutoff=args.pval_cutoff),
+				"TTest": run_ttest(adata, n_top=args.n_top, pval_cutoff=args.pval_cutoff),
+				"LogReg": run_logreg(adata, n_top=args.n_top, pval_cutoff=args.pval_cutoff),
+			}
 			for seed in range(args.seeds):
 				t0 = time.time()
-				adata, staged = BUILDERS[scen](
-					sim_seed=args.sim_seed + seed, stage_seed=seed,
-					n_staged=args.n_staged, ncells=args.ncells, ngenes=args.ngenes,
-					center=args.center, sd=args.sd, sep=args.sep, alpha=args.alpha)
-				panels = {
-					"Wilcoxon": run_wilcoxon(adata, n_top=args.n_top, pval_cutoff=args.pval_cutoff),
-					"TTest": run_ttest(adata, n_top=args.n_top, pval_cutoff=args.pval_cutoff),
-					"LogReg": run_logreg(adata, n_top=args.n_top, pval_cutoff=args.pval_cutoff),
-					"recursieve": run_recursieve(adata, n_top=args.n_top,
-												 max_iterations=args.max_iterations,
-												 pval_cutoff=args.pval_cutoff),
-				}
+				panels = dict(de_panels)
+				rs = run_recursieve(
+					adata, n_top=args.n_top, seed=args.rs_seed + seed,
+					max_iterations=args.max_iterations, pval_cutoff=args.pval_cutoff)
+				rs_n, rs_size = count_recovered(rs, staged), len(rs)
 				line = []
 				for m in METHOD_ORDER:
-					n = count_recovered(panels[m], staged)
-					rows.append(dict(scenario=scen, seed=seed, method=m,
-									 n_recovered=n, panel_size=len(panels[m])))
-					line.append(f"{m}={n}")
-				print(f"  [{scen} s{seed}] " + "  ".join(line) + f"   [{time.time()-t0:.0f}s]", flush=True)
-		df = pd.concat([df, pd.DataFrame(rows)], ignore_index=True)
-		df = df.drop_duplicates(subset=["scenario", "seed", "method"], keep="last").reset_index(drop=True)
-		df.to_csv(csv, index=False)
+					if m == "recursieve":
+						# recursieve does not filter on p, so raw and adjusted match
+						n, size, n_adj, size_adj = rs_n, rs_size, rs_n, rs_size
+					else:
+						raw, adj = panels[m]
+						n, size = count_recovered(raw, staged), len(raw)
+						n_adj, size_adj = count_recovered(adj, staged), len(adj)
+					rows.append(dict(dataset=ds, scenario=scen, seed=seed, method=m,
+									 n_recovered=n, panel_size=size,
+									 n_recovered_adj=n_adj, panel_size_adj=size_adj))
+					line.append(f"{m}={n}/{n_adj}")
+				print(f"  [d{ds} {scen} s{seed}] " + "  ".join(line) + f"   [{time.time()-t0:.0f}s]", flush=True)
+			# save after each dataset and scenario so a crash loses little
+			out = pd.concat([df, pd.DataFrame(rows)], ignore_index=True)
+			out["dataset"] = out["dataset"].astype(int)
+			out.drop_duplicates(subset=keys, keep="last").to_csv(csv, index=False)
+		df = pd.read_csv(csv, keep_default_na=False, na_values=[])
+		df = _normalize_scenario_labels(df)
 
 	if df.empty:
 		raise SystemExit(f"No benchmark data in {csv}")
 	order = ordered_scenarios(df, scenarios)
-	piv = df.pivot_table(index="scenario", columns="method", values="n_recovered")
+	n_ds = df["dataset"].nunique()
+	extra = f", {n_ds} datasets" if n_ds > 1 else ""
+	value, suffix = "n_recovered_adj", "_adj"
+	subtitle = SUBTITLE_ADJ.replace(")", extra + ")")
+	note = correction_note(args.pval_cutoff)
+	piv = df.pivot_table(index="scenario", columns="method", values=value)
+	print(value)
 	print(piv[[m for m in METHOD_ORDER if m in piv.columns]].reindex(order).round(2).to_string())
-	plot_heatmap(df, out_dir, args.n_staged, order)
+	plot_heatmap(df, out_dir, args.n_staged, order, value=value, subtitle=subtitle,
+				 suffix=suffix, tag=args.tag, note=note)
+	if n_ds > 1:
+		plot_outcome_violins(df, out_dir, args.n_staged, order, value=value,
+							 subtitle=subtitle, suffix=suffix, tag=args.tag, note=note)
 
 if __name__ == "__main__":
 	main()

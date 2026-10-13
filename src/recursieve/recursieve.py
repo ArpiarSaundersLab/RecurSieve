@@ -1063,7 +1063,8 @@ class recursieve:
 		}
 		return self.seed_stability_results
 
-	def coexpression_null(self, n_shuffles=25, max_iterations=None, n_parallel=None, verbose=0):
+	def coexpression_null(self, n_shuffles=25, max_iterations=None, n_parallel=None, verbose=0,
+						  first_shuffle=1):
 		"""
 		Rerun selection on data with gene-gene co-expression destroyed.
 
@@ -1093,7 +1094,7 @@ class recursieve:
 		Parameters
 		----------
 		n_shuffles : int, optional
-			Number of independently shuffled matrices. Default is 3.
+			Number of independently shuffled matrices. Default is 25.
 		max_iterations : int, optional
 			Override the number of iterations of the shuffled runs. Default
 			is None (len(self.genes) - 1, so shuffled panels match the
@@ -1105,6 +1106,11 @@ class recursieve:
 		verbose : int, optional
 			joblib progress level; 10 or more reports every finished
 			shuffle. Default is 0 (silent).
+		first_shuffle : int, optional
+			Index of the first shuffle. Shuffle k uses seed (seed, k) and is
+			named shuffle_k, so a later call with first_shuffle = previous
+			n_shuffles + 1 adds new shuffles without repeating old ones.
+			Default is 1.
 
 		Returns
 		-------
@@ -1160,12 +1166,12 @@ class recursieve:
 		results = Parallel(n_jobs=n_parallel, verbose=verbose)(
 			delayed(recursieve._run_null_shuffle)(
 				X, obs, self.adata.var_names, params, (self.seed, k), self.genes)
-			for k in range(1, n_shuffles + 1)
+			for k in range(first_shuffle, first_shuffle + n_shuffles)
 		)
 		rows = [self._null_summary(self, "observed", self.genes)]
 		curves = [("observed", i + 2, f) for i, f in enumerate(self.flip_rates)]
 		panels = [("observed", i + 1, g) for i, g in enumerate(self.genes)]
-		for k, (summary, flips, genes) in enumerate(results, start=1):
+		for k, (summary, flips, genes) in enumerate(results, start=first_shuffle):
 			name = f"shuffle_{k}"
 			rows.append({"run": name, **summary})
 			curves += [(name, i + 2, f) for i, f in enumerate(flips)]
