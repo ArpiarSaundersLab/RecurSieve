@@ -1063,7 +1063,7 @@ class recursieve:
 		}
 		return self.seed_stability_results
 
-	def coexpression_null(self, n_shuffles=25, max_iterations=None, n_parallel=None, verbose=0,
+	def coexpression_null(self, n_shuffles=100, max_iterations=None, n_parallel=None, verbose=0,
 						  first_shuffle=1):
 		"""
 		Rerun selection on data with gene-gene co-expression destroyed.
