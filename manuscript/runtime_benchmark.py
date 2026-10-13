@@ -1,15 +1,20 @@
 """Runtime of recursieve on simulated data of increasing size.
 
 Runs recursieve 3 times on simulated datasets of 2000 genes and 5k to 25k
-cells. Existing results in the output folder are resumed.
+cells. Every run does exactly N_ITERATIONS iterations (stopping rules off):
+with the defaults, the number of iterations depends on the seed and varies
+more than tenfold, which hides how runtime scales with dataset size. Existing
+results in the output folder are resumed; runs made with a different
+N_ITERATIONS are ignored.
 
 Usage:
     python runtime_benchmark.py [--out-dir DIR]
 
 Outputs (to DIR):
 - runtime_benchmark_results.csv: Runtime of every run
-- runtime_benchmark_summary.csv: Mean, SD, min, and max per size
-- runtime_benchmark_barplot.png / .pdf
+- runtime_benchmark_summary.csv: Mean, SD, median, min, and max per size
+- runtime_benchmark_barplot.png / .pdf: median runtime, min-max range, and
+  each run as a dot
 """
 
 from __future__ import annotations
@@ -30,6 +35,7 @@ from scsim import scsim
 GENE_COUNT = 2000
 CELL_COUNTS = [5000, 10000, 15000, 20000, 25000]
 N_REPEATS = 3
+N_ITERATIONS = 20  # iterations per run, fixed so runs are comparable
 
 
 def build_dataset(ncells: int, ngenes: int, seed: int) -> ad.AnnData:
@@ -54,10 +60,13 @@ def build_dataset(ncells: int, ngenes: int, seed: int) -> ad.AnnData:
     return adata
 
 
-def time_recursieve(adata: ad.AnnData, seed: int) -> float:
-    """Run recursieve once and return runtime in seconds."""
+def time_recursieve(adata: ad.AnnData, seed: int) -> tuple[float, int]:
+    """Run recursieve once for N_ITERATIONS iterations.
+
+    Returns runtime in seconds and the number of genes selected.
+    """
     start = time.perf_counter()
-    _ = recursieve.recursieve(
+    model = recursieve.recursieve(
         adata.copy(),
         group1="group_1",
         group2="group_2",
@@ -66,37 +75,47 @@ def time_recursieve(adata: ad.AnnData, seed: int) -> float:
         print_to_console=False,
         n_jobs=-1,
         seed=seed,
+        # stopping rules off: a negative threshold disables the threshold and
+        # oscillation stops, and patience=None disables the patience stop
+        max_iterations=N_ITERATIONS,
+        flip_rate_percentage=-1.0,
+        patience=None,
     )
-    return time.perf_counter() - start
+    return time.perf_counter() - start, len(model.genes)
 
 
-def plot_results(summary_df: pd.DataFrame, out_png: Path, out_pdf: Path) -> None:
-    """Bar plot of mean runtime with SD error bars."""
+def plot_results(summary_df: pd.DataFrame, results_df: pd.DataFrame,
+                 out_png: Path, out_pdf: Path) -> None:
+    """Bar plot of median runtime with min-max range and every run as a dot."""
     sns.set_theme(style="whitegrid", context="talk")
     fig, ax = plt.subplots(figsize=(10, 6))
 
-    plot_df = summary_df.sort_values("cells").copy()
-    plot_df["cells_label"] = plot_df["cells"].map(lambda x: f"{x // 1000}k")
+    plot_df = summary_df.sort_values("cells").reset_index(drop=True)
+    labels = [f"{x // 1000}k" for x in plot_df["cells"]]
+    x = range(len(plot_df))
+    median = plot_df["median_runtime_sec"]
+    # min-max range around the median (never below zero, unlike mean +/- SD)
+    yerr = [median - plot_df["min_runtime_sec"], plot_df["max_runtime_sec"] - median]
+    ax.bar(x, median, yerr=yerr, capsize=6, color="#94b6d8", edgecolor="black",
+           linewidth=1.0, error_kw={"elinewidth": 1.2})
+    for i, n_cells in enumerate(plot_df["cells"]):
+        runs = results_df.loc[results_df["cells"] == n_cells, "runtime_sec"]
+        ax.scatter([i] * len(runs), runs, s=25, color="#1a1d21", zorder=3)
 
-    palette = ["#1f78b4", "#33a02c", "#e31a1c", "#ff7f00", "#6a3d9a"]
-    ax.bar(
-        plot_df["cells_label"],
-        plot_df["mean_runtime_sec"],
-        yerr=plot_df["std_runtime_sec"],
-        capsize=6,
-        color=palette,
-        edgecolor="black",
-        linewidth=1.0,
-    )
-
-    ax.set_title("recursieve Runtime vs Dataset Size", pad=12, weight="bold")
+    ax.set_xticks(list(x))
+    ax.set_xticklabels(labels)
+    ax.set_title(f"recursieve Runtime vs Dataset Size ({N_ITERATIONS} iterations)",
+                 pad=12, weight="bold")
     ax.set_xlabel("Number of Cells (2000 genes)")
     ax.set_ylabel("Runtime (seconds)")
+    ax.set_ylim(bottom=0)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
 
-    for i, val in enumerate(plot_df["mean_runtime_sec"]):
-        ax.text(i, val, f"{val:.1f}s", ha="center", va="bottom", fontsize=10)
+    # median label just above the top of the range
+    pad = 0.02 * plot_df["max_runtime_sec"].max()
+    for i, (val, top) in enumerate(zip(median, plot_df["max_runtime_sec"])):
+        ax.text(i, top + pad, f"{val:.1f}s", ha="center", va="bottom", fontsize=10)
 
     fig.tight_layout()
     fig.savefig(out_png, dpi=300)
@@ -120,9 +139,15 @@ def main() -> None:
 
     if results_path.exists():
         existing = pd.read_csv(results_path)
+        # only runs made with this iteration count can be combined
+        if "iterations" in existing.columns:
+            existing = existing[existing["iterations"] == N_ITERATIONS]
+        else:
+            existing = existing.iloc[0:0]
         rows = existing.to_dict("records")
         done = {(int(r["cells"]), int(r["replicate"])) for r in rows}
-        print(f"Resuming from existing results: {len(rows)} completed runs")
+        print(f"Resuming from existing results: {len(rows)} completed runs "
+              f"with {N_ITERATIONS} iterations")
 
     for i, n_cells in enumerate(CELL_COUNTS):
         dataset_seed = 1000 + i
@@ -135,8 +160,8 @@ def main() -> None:
                 continue
             run_seed = 2000 + i * 10 + rep
             print(f"  Running recursieve replicate {rep}/{N_REPEATS} (seed={run_seed})")
-            runtime_sec = time_recursieve(adata=adata, seed=run_seed)
-            print(f"    Runtime: {runtime_sec:.3f} sec")
+            runtime_sec, n_selected = time_recursieve(adata=adata, seed=run_seed)
+            print(f"    Runtime: {runtime_sec:.3f} sec ({n_selected} genes selected)")
             rows.append(
                 {
                     "cells": n_cells,
@@ -144,6 +169,8 @@ def main() -> None:
                     "replicate": rep,
                     "dataset_seed": dataset_seed,
                     "run_seed": run_seed,
+                    "iterations": N_ITERATIONS,
+                    "genes_selected": n_selected,
                     "runtime_sec": runtime_sec,
                 }
             )
@@ -154,12 +181,13 @@ def main() -> None:
 
     summary_df = (
         results_df.groupby(["cells", "genes"], as_index=False)["runtime_sec"]
-        .agg(["mean", "std", "min", "max"])
+        .agg(["mean", "std", "median", "min", "max"])
         .reset_index()
         .rename(
             columns={
                 "mean": "mean_runtime_sec",
                 "std": "std_runtime_sec",
+                "median": "median_runtime_sec",
                 "min": "min_runtime_sec",
                 "max": "max_runtime_sec",
             }
@@ -167,7 +195,7 @@ def main() -> None:
     )
     summary_df.to_csv(summary_path, index=False)
 
-    plot_results(summary_df, out_png=plot_png, out_pdf=plot_pdf)
+    plot_results(summary_df, results_df, out_png=plot_png, out_pdf=plot_pdf)
 
     print(summary_df.round(2).to_string(index=False))
 
