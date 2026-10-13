@@ -89,7 +89,7 @@ Both methods return a dictionary of pandas DataFrames and do not write files. Th
 
 ```python
 seeds = model.seed_stability(n_seeds=10)
-null = model.coexpression_null(n_shuffles=25)
+null = model.coexpression_null(n_shuffles=100)
 
 seeds["gene_frequency"].to_csv("seed_gene_frequency.csv", index=False)
 null["pvalues"].to_csv("null_pvalues.csv", index=False)
