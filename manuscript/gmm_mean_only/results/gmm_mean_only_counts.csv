@@ -1,0 +1,91 @@
+dataset,scenario,seed,variant,n_recovered,panel_size,stop_reason,seconds
+0,null,0,counts + mean,0,43,patience,138.7
+0,null,0,mean only,0,16,threshold,55.1
+0,null,1,counts + mean,0,39,threshold,125.6
+0,null,1,mean only,0,18,threshold,61.3
+0,null,2,counts + mean,0,39,patience,125.7
+0,null,2,mean only,0,16,threshold,52.9
+0,bimodal,0,counts + mean,10,27,patience,88.4
+0,bimodal,0,mean only,2,50,max_iterations,163.3
+0,bimodal,1,counts + mean,10,36,patience,117.5
+0,bimodal,1,mean only,2,47,threshold,151.7
+0,bimodal,2,counts + mean,2,41,patience,130.9
+0,bimodal,2,mean only,2,24,threshold,78.6
+0,trimodal,0,counts + mean,10,50,max_iterations,166.7
+0,trimodal,0,mean only,9,39,patience,125.8
+0,trimodal,1,counts + mean,10,50,patience,162.3
+0,trimodal,1,mean only,10,50,max_iterations,164.9
+0,trimodal,2,counts + mean,10,50,max_iterations,163.6
+0,trimodal,2,mean only,0,21,threshold,68.5
+0,skew,0,counts + mean,10,37,patience,120.0
+0,skew,0,mean only,1,30,patience,98.0
+0,skew,1,counts + mean,10,50,max_iterations,165.4
+0,skew,1,mean only,1,50,max_iterations,162.1
+0,skew,2,counts + mean,10,47,patience,151.9
+0,skew,2,mean only,0,13,patience,44.0
+0,coexpression,0,counts + mean,10,50,max_iterations,165.1
+0,coexpression,0,mean only,0,26,patience,70.8
+0,coexpression,1,counts + mean,10,48,patience,152.4
+0,coexpression,1,mean only,0,20,patience,51.7
+0,coexpression,2,counts + mean,10,50,max_iterations,117.1
+0,coexpression,2,mean only,0,18,threshold,26.4
+1,null,0,counts + mean,0,35,patience,117.5
+1,null,0,mean only,0,34,patience,116.3
+1,null,1,counts + mean,0,50,max_iterations,171.5
+1,null,1,mean only,0,15,threshold,52.7
+1,null,2,counts + mean,0,27,patience,90.9
+1,null,2,mean only,0,27,patience,94.8
+1,bimodal,0,counts + mean,0,46,threshold,156.8
+1,bimodal,0,mean only,0,50,max_iterations,175.8
+1,bimodal,1,counts + mean,0,47,threshold,160.9
+1,bimodal,1,mean only,0,17,threshold,60.7
+1,bimodal,2,counts + mean,0,34,threshold,117.4
+1,bimodal,2,mean only,0,13,threshold,45.9
+1,trimodal,0,counts + mean,0,50,max_iterations,176.5
+1,trimodal,0,mean only,0,32,patience,112.1
+1,trimodal,1,counts + mean,4,33,threshold,115.8
+1,trimodal,1,mean only,0,18,threshold,65.5
+1,trimodal,2,counts + mean,0,21,patience,72.9
+1,trimodal,2,mean only,0,29,patience,107.4
+1,skew,0,counts + mean,0,47,threshold,165.6
+1,skew,0,mean only,0,14,threshold,51.5
+1,skew,1,counts + mean,10,45,threshold,162.0
+1,skew,1,mean only,0,15,threshold,55.1
+1,skew,2,counts + mean,10,50,max_iterations,184.5
+1,skew,2,mean only,0,18,threshold,65.0
+1,coexpression,0,counts + mean,10,50,max_iterations,182.7
+1,coexpression,0,mean only,10,21,patience,62.9
+1,coexpression,1,counts + mean,10,50,max_iterations,174.7
+1,coexpression,1,mean only,10,21,patience,50.8
+1,coexpression,2,counts + mean,2,46,patience,122.2
+1,coexpression,2,mean only,0,19,threshold,30.7
+0,null,0,"mean only, no stop",0,50,max_iterations,175.2
+0,null,1,"mean only, no stop",0,50,max_iterations,173.6
+0,null,2,"mean only, no stop",0,50,max_iterations,175.9
+0,bimodal,0,"mean only, no stop",2,50,max_iterations,171.0
+0,bimodal,1,"mean only, no stop",2,50,max_iterations,177.8
+0,bimodal,2,"mean only, no stop",10,50,max_iterations,178.0
+0,trimodal,0,"mean only, no stop",10,50,max_iterations,179.0
+0,trimodal,1,"mean only, no stop",10,50,max_iterations,177.8
+0,trimodal,2,"mean only, no stop",0,50,max_iterations,194.2
+0,skew,0,"mean only, no stop",7,50,max_iterations,194.6
+0,skew,1,"mean only, no stop",1,50,max_iterations,192.3
+0,skew,2,"mean only, no stop",10,50,max_iterations,193.9
+0,coexpression,0,"mean only, no stop",1,50,max_iterations,142.3
+0,coexpression,1,"mean only, no stop",2,50,max_iterations,143.3
+0,coexpression,2,"mean only, no stop",0,50,max_iterations,142.8
+1,null,0,"mean only, no stop",0,50,max_iterations,199.6
+1,null,1,"mean only, no stop",0,50,max_iterations,201.5
+1,null,2,"mean only, no stop",0,50,max_iterations,198.4
+1,bimodal,0,"mean only, no stop",0,50,max_iterations,198.5
+1,bimodal,1,"mean only, no stop",0,50,max_iterations,195.3
+1,bimodal,2,"mean only, no stop",0,50,max_iterations,195.7
+1,trimodal,0,"mean only, no stop",0,50,max_iterations,196.0
+1,trimodal,1,"mean only, no stop",0,50,max_iterations,197.8
+1,trimodal,2,"mean only, no stop",0,50,max_iterations,197.8
+1,skew,0,"mean only, no stop",0,50,max_iterations,198.2
+1,skew,1,"mean only, no stop",0,50,max_iterations,197.3
+1,skew,2,"mean only, no stop",0,50,max_iterations,196.9
+1,coexpression,0,"mean only, no stop",10,50,max_iterations,153.7
+1,coexpression,1,"mean only, no stop",10,50,max_iterations,153.5
+1,coexpression,2,"mean only, no stop",0,50,max_iterations,153.1
