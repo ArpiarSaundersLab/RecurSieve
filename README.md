@@ -104,5 +104,5 @@ The RecurSieve software is released under the [MIT License](https://github.com/A
 
 ## Citation
 
-RecurSieve: A Python Package to Detect Subtle Gene Expression Differences Across Single-Cell RNA-seq ComparisonsUsing Iterative Machine Learning <br>
+RecurSieve: A Python Package to Detect Subtle Gene Expression Differences Across Single-Cell RNA-seq Comparisons Using Iterative Machine Learning <br>
 <i>bioRxiv link coming soon</i>

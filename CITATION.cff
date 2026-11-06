@@ -1,8 +1,8 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it using the metadata from this file."
 type: software
-title: "RecurSieve: A Python Package Using Iterative Machine Learning to Detect Subtle Gene Expression Patterns in Single-Cell Data"
-version: 1.0.1
+title: "RecurSieve: A Python Package to Detect Subtle Gene Expression Differences Across Single-Cell RNA-seq Comparisons Using Iterative Machine Learning"
+version: 1.0.4
 license: MIT
 repository-code: "https://github.com/ArpiarSaundersLab/RecurSieve"
 abstract: >-
