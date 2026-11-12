@@ -45,16 +45,27 @@ SCATTER_LABEL_FONT_SIZE = 6
 SUMMARY_PATH = "distribution_assessment/distribution_summary.csv"
 
 #settings for each recursieve run in the paper, and the genes reported from that run
+#genes = labeled in the scatter and shown in panel E
+#recursieve_genes = every gene recursieve found in that run (Supplemental Table 1), black points in the scatter
 RUNS = {
     "all_cell_types": {
         "title": "All cell types",
         "cell_type": None, "n_cells": 50000, "balance_groups": False,
         "genes": ["WWOX", "CNTN5", "HSP90AA1", "KCNIP4", "HS6ST3", "DPP10"],
+        "recursieve_genes": ["WWOX", "NCAM2", "HSP90AA1", "ERBB4", "CNTN5", "DPP10", "HS6ST3", "PDE4B",
+                             "KCNIP4", "SNHG14", "DOCK4", "SPOCK1", "RALYL", "LUC7L3", "RBM25", "QKI",
+                             "ZEB2", "PLXDC2", "COPG2", "SLC24A2", "ANKRD12", "FRMD5", "FHIT", "ROBO2",
+                             "PLCL1", "ELMO1", "NPAS3", "SLC44A1", "ARAP2", "MAN2A1", "DPYD", "GRID2",
+                             "DIP2B", "FRYL", "TCF12", "ZC3H13", "EDIL3", "ZNF91", "ENSG00000230021",
+                             "PIP4K2A", "SLAIN1"],
     },
     "excitatory": {
         "title": "Excitatory neurons",
         "cell_type": "Excitatory", "n_cells": 25000, "balance_groups": True,
         "genes": ["LRP1B", "CNTNAP2"],
+        "recursieve_genes": ["HSP90AA1", "MAP1B", "AKAP9", "LRP1B", "DPP10", "CNTNAP2", "SNHG14", "LUC7L3",
+                             "RBM25", "SRSF11", "LRFN5", "COPG2", "TENM2", "PNISR", "CDH12", "ANKRD26",
+                             "ANKRD12", "PRRC2C", "ENSG00000274422", "BDP1", "TAFA2", "EPIC1", "ZC3H13"],
     },
 }
 
@@ -134,7 +145,8 @@ def print_summary(genes, wasserstein_results, ks_results, top_genes):
               f"KS = {ks_results[gene]:.3f} ({ks_percentile:.0f}th percentile)")
 
 
-def plot_percentile_scatter(ax, wasserstein_results, ks_results, genes, top_genes, title, show_ylabel):
+def plot_percentile_scatter(ax, wasserstein_results, ks_results, genes, recursieve_genes, top_genes, title,
+                            show_ylabel):
     #each top 2000 gene placed by its wasserstein percentile (x) and KS percentile (y), 100 = most different
     #percentile = share of the top 2000 genes with a smaller value, same as print_summary
     top_wasserstein = wasserstein_results[wasserstein_results.index.isin(top_genes)]
@@ -160,6 +172,12 @@ def plot_percentile_scatter(ax, wasserstein_results, ks_results, genes, top_gene
     ax.set_ylabel("KS percentile" if show_ylabel else "")
     ax.spines[["top", "right"]].set_visible(False)
 
+    #every gene recursieve found in black, no label
+    for gene in recursieve_genes:
+        gene_wasserstein = (top_wasserstein < wasserstein_results[gene]).mean() * 100
+        gene_ks = (top_ks < ks_results[gene]).mean() * 100
+        ax.scatter(gene_wasserstein, gene_ks, color="black", s=2, zorder=3, clip_on=False)
+
     #genes of interest in black, labels stacked on the left and right-aligned, highest KS on top
     gene_percentiles = []
     for gene in genes:
@@ -170,7 +188,7 @@ def plot_percentile_scatter(ax, wasserstein_results, ks_results, genes, top_gene
 
     for step, (gene, gene_wasserstein, gene_ks) in enumerate(gene_percentiles):
         #clip_on=False so a point at the very top or right edge isn't cut in half
-        ax.scatter(gene_wasserstein, gene_ks, color="black", s=8, zorder=3, clip_on=False)
+        ax.scatter(gene_wasserstein, gene_ks, color="black", s=2, zorder=3, clip_on=False)
         #start below the dashed 90th percentile line so it doesn't run through the labels
         label_height = 0.84 - step * 0.1
         #gene name only, the exact percentiles go in the caption or supplemental table
@@ -189,8 +207,9 @@ def plot_scatter_panel(run_results):
         fig, axes = plt.subplots(1, len(RUNS), figsize=SCATTER_PANEL_SIZE, layout="constrained", squeeze=False)
         for column, (ax, (run_name, settings)) in enumerate(zip(axes.flat, RUNS.items())):
             wasserstein_results, ks_results, top_genes, gene_values = run_results[run_name]
-            plot_percentile_scatter(ax, wasserstein_results, ks_results, settings["genes"], top_genes,
-                                    settings["title"], show_ylabel=(column == 0))
+            plot_percentile_scatter(ax, wasserstein_results, ks_results, settings["genes"],
+                                    settings["recursieve_genes"], top_genes, settings["title"],
+                                    show_ylabel=(column == 0))
 
         Path(SCATTER_PANEL_PATH).parent.mkdir(parents=True, exist_ok=True)
         fig.savefig(f"{SCATTER_PANEL_PATH}.png", dpi=FIGURE_DPI)
@@ -324,7 +343,9 @@ run_results = {}
 for run_name, settings in RUNS.items():
     print(f"\n{settings['title']}")
     adata = load_and_preprocess(settings)
-    wasserstein_results, ks_results, top_genes = score_genes(adata, settings["genes"])
+    #score the labeled genes plus every recursieve gene, so all of them can go on the scatter
+    score_list = list(dict.fromkeys(settings["genes"] + settings["recursieve_genes"]))
+    wasserstein_results, ks_results, top_genes = score_genes(adata, score_list)
     print_summary(settings["genes"], wasserstein_results, ks_results, top_genes)
     gene_values = collect_gene_values(adata, settings["genes"])
     run_results[run_name] = (wasserstein_results, ks_results, top_genes, gene_values)
